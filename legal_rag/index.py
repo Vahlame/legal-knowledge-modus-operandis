@@ -12,7 +12,7 @@ import json
 from collections import defaultdict, Counter
 
 from legal_rag.chunker import chunk_file
-from legal_rag import embed
+from legal_rag import embed, graph
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MD_DIR = ROOT / "markdown"
@@ -27,15 +27,16 @@ def build():
         """CREATE VIRTUAL TABLE chunks USING fts5(
                slug UNINDEXED, name UNINDEXED, kind UNINDEXED,
                heading, article UNINDEXED, structure, citation UNINDEXED, text,
+               section UNINDEXED,
                tokenize='unicode61 remove_diacritics 2')"""
     )
     docs = sorted(MD_DIR.glob("*.md"))
     chunks = [c for md in docs for c in chunk_file(md)]
     con.executemany(
-        "INSERT INTO chunks(slug,name,kind,heading,article,structure,citation,text)"
-        " VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO chunks(slug,name,kind,heading,article,structure,citation,text,section)"
+        " VALUES(?,?,?,?,?,?,?,?,?)",
         [(c["slug"], c["name"], c["kind"], c["heading"], c["article"],
-          c["structure"], c["citation"], c["text"]) for c in chunks],
+          c["structure"], c["citation"], c["text"], c["section"]) for c in chunks],
     )
 
     # --- capa semántica ---
@@ -62,10 +63,15 @@ def build():
     con.execute("CREATE TABLE seminfo(k TEXT PRIMARY KEY, v TEXT)")
     con.executemany("INSERT INTO seminfo VALUES(?,?)",
                     [("N", str(N)), ("embedder", embed.NAME), ("dims", str(len(postings)))])
+
+    # --- grafo de concordancias (F4) ---
+    n_edges = graph.build_into(con, chunks)
+
     con.commit()
     con.close()
     print(f"Indexados {N} chunks de {len(docs)} documentos "
-          f"(BM25 + semántico '{embed.NAME}', {len(postings)} dims) -> {DB}")
+          f"(BM25 + semántico '{embed.NAME}', {len(postings)} dims, "
+          f"{n_edges} concordancias) -> {DB}")
 
 
 if __name__ == "__main__":

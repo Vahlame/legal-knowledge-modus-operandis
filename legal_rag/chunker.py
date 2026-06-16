@@ -41,6 +41,7 @@ def chunk_file(path: pathlib.Path):
     slug, name = path.stem, display_name(path.stem)
     kind = meta.get("doc_kind", "")
     chunks, structure, cur, buf = [], "", None, []
+    sec = 0  # id de sección estructural: único por Capítulo físico, no por su título
 
     def flush():
         if cur is not None:
@@ -52,6 +53,7 @@ def chunk_file(path: pathlib.Path):
         if line.startswith("### "):           # divisor estructural
             flush()
             cur, buf = None, []
+            sec += 1
             structure = line[4:].strip()
         elif line.startswith("## "):           # artículo = unidad de recuperación
             flush()
@@ -61,7 +63,8 @@ def chunk_file(path: pathlib.Path):
             art = m.group(1).strip() if m else None
             cite = f"{name}, art. {art}" if art else f"{name} — {heading}"
             cur = {"slug": slug, "name": name, "kind": kind, "heading": heading,
-                   "article": art, "structure": structure, "citation": cite}
+                   "article": art, "structure": structure, "section": f"{slug}#{sec}",
+                   "citation": cite}
         else:
             buf.append(line)
     flush()
@@ -72,5 +75,6 @@ def chunk_file(path: pathlib.Path):
             if len(p) < 15:
                 continue
             chunks.append({"slug": slug, "name": name, "kind": kind, "heading": name,
-                           "article": None, "structure": "", "citation": name, "text": p})
+                           "article": None, "structure": "", "section": f"{slug}#0",
+                           "citation": name, "text": p})
     return chunks
