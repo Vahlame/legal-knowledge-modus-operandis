@@ -76,14 +76,14 @@ def hybrid(query, code=None, pool=120, k=60, ratio=0.30, cap=40):
         if s < ratio * top:
             break
         row = con.execute(
-            "SELECT slug, citation, structure, kind, text FROM chunks WHERE rowid = ?", (rid,)
+            "SELECT slug, article, citation, structure, kind, text FROM chunks WHERE rowid = ?", (rid,)
         ).fetchone()
         if not row:
             continue
-        slug, cite, struct, kind, text = row
+        slug, article, cite, struct, kind, text = row
         if code and slug != code:
             continue
-        out.append({"rowid": rid, "score": round(s, 5), "slug": slug,
+        out.append({"rowid": rid, "score": round(s, 5), "slug": slug, "article": article,
                     "citation": cite, "structure": struct, "kind": kind, "text": text})
     con.close()
     return out
