@@ -1,0 +1,5 @@
+# Normaliza saltos de línea en texto; nunca toca binarios.
+* text=auto
+*.pdf binary
+*.db binary
+*.png binary
