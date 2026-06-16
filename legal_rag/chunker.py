@@ -24,6 +24,32 @@ def es_vigente(text: str) -> bool:
     return not _DEROG.match(text.strip())
 
 
+# Notas de historia legislativa SCIJ. Se separan POR PÁRRAFOS (no por paréntesis):
+# el texto legal tiene paréntesis DESBALANCEADOS ("inciso a)", "aparte b)") que
+# romperían cualquier emparejamiento. En el Markdown las notas son párrafos propios,
+# así que un párrafo que EMPIEZA con un encabezado de nota es historia; el resto es
+# texto operativo. No toca paréntesis operativos ("(en adelante, el Comprador)").
+_NOTE_START = re.compile(
+    r"^\(\s*(?:"
+    r"as[ií]\s+(?:reformad|adicionad|corrid|modificad|reubicad|ampliad|derogad|"
+    r"interpretad|reenumerad|trasladad|aclarad|reform)"
+    r"|nota\s+(?:de\s+sinalevi|del\s+editor)"
+    r"|mediante\s+resoluci[oó]n"
+    r"|(?:reformad[oa]|adicionad[oa]|derogad[oa]|interpretad[oa])\s+por"
+    r")", re.I)
+
+
+def split_reformas(body: str):
+    """Separa, por párrafos, las notas SCIJ del texto operativo. Robusto ante
+    paréntesis desbalanceados. Devuelve (operativo, [notas])."""
+    operative, notes = [], []
+    for p in re.split(r"\n\s*\n", body):
+        p = re.sub(r"\s+", " ", p).strip()
+        if p:
+            (notes if _NOTE_START.match(p) else operative).append(p)
+    return " ".join(operative).strip(), notes
+
+
 def parse_frontmatter(text: str):
     if text.startswith("---"):
         end = text.find("\n---", 3)
@@ -50,9 +76,18 @@ def chunk_file(path: pathlib.Path):
 
     def flush():
         if cur is not None:
-            cur["text"] = "\n".join(buf).strip()
-            if cur["text"]:
-                cur["vigente"] = 1 if (cur["doc_type"] != "ley" or es_vigente(cur["text"])) else 0
+            body = "\n".join(buf).strip()
+            if body:
+                es_ley = cur["doc_type"] == "ley"
+                vig = (not es_ley) or es_vigente(body)
+                cur["vigente"] = 1 if vig else 0
+                if es_ley and vig:
+                    operative, notes = split_reformas(body)
+                    cur["text"] = operative or body          # nunca dejar vacío
+                    cur["reformas"] = " ".join(notes)
+                else:
+                    cur["text"] = body                       # derogado/temario: tal cual
+                    cur["reformas"] = ""
                 chunks.append(cur)
 
     for line in body.splitlines():
@@ -80,5 +115,6 @@ def chunk_file(path: pathlib.Path):
             if len(p) < 15:
                 continue
             chunks.append({**base, "heading": name, "article": None, "structure": "",
-                           "section": f"{slug}#0", "citation": name, "text": p, "vigente": 1})
+                           "section": f"{slug}#0", "citation": name, "text": p,
+                           "vigente": 1, "reformas": ""})
     return chunks

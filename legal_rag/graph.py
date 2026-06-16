@@ -31,15 +31,22 @@ EXTERNAL = re.compile(
     re.I,
 )
 NUM = re.compile(r"\d{1,4}")
+_RANGE = re.compile(r"(\d{1,4})\s+a\s+(\d{1,4})")   # "artículos 5 a 9"
 
 
 def refs_in(text: str):
-    """Conjunto de números de artículo (mismo código) citados en el texto."""
+    """Conjunto de números de artículo (mismo código) citados en el texto,
+    expandiendo los rangos ('5 a 9' -> 5,6,7,8,9)."""
     out = set()
     for m in REF_HEAD.finditer(text):
         if EXTERNAL.match(text[m.end():m.end() + 20]):
             continue
-        out.update(NUM.findall(m.group(1)))
+        region = m.group(1)
+        out.update(NUM.findall(region))
+        for a, b in _RANGE.findall(region):
+            a, b = int(a), int(b)
+            if 0 < b - a <= 50:                    # rango razonable
+                out.update(str(x) for x in range(a, b + 1))
     return out
 
 

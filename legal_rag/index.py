@@ -66,16 +66,17 @@ def build():
                slug UNINDEXED, name UNINDEXED, doc_type UNINDEXED,
                heading, article UNINDEXED, structure, citation UNINDEXED, text,
                section UNINDEXED, rama UNINDEXED, source UNINDEXED, vigente UNINDEXED,
+               reformas UNINDEXED,
                tokenize='unicode61 remove_diacritics 2')"""
     )
     docs = sorted(MD_DIR.glob("*.md"))
     chunks = [c for md in docs for c in chunk_file(md)]
     con.executemany(
         "INSERT INTO chunks(slug,name,doc_type,heading,article,structure,citation,text,"
-        "section,rama,source,vigente) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        "section,rama,source,vigente,reformas) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [(c["slug"], c["name"], c["doc_type"], c["heading"], c["article"], c["structure"],
-          c["citation"], c["text"], c["section"], c["rama"], c["source"], c["vigente"])
-         for c in chunks],
+          c["citation"], c["text"], c["section"], c["rama"], c["source"], c["vigente"],
+          c["reformas"]) for c in chunks],
     )
 
     embedder, sem_desc = _build_semantic(con, chunks)

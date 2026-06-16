@@ -88,7 +88,23 @@ def _pack(row, score):
             "vigente": bool(vigente), "text": text}
 
 
-def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0,
+def _focus(query, text, head=900, win=900):
+    """Para artículos largos (el reranker trunca ~512 tokens): envía la cabeza + la
+    ventana de texto con más solapamiento con la consulta, para no juzgarlo solo por
+    su inicio. Los cortos pasan completos."""
+    if len(text) <= head + win:
+        return text
+    qtok = {t for t in re.findall(r"\w+", embed.fold(query)) if len(t) > 2}
+    folded = embed.fold(text)
+    best_i, best = head, -1
+    for i in range(head, len(text) - win + 1, 250):
+        s = sum(1 for t in qtok if t in folded[i:i + win])
+        if s > best:
+            best, best_i = s, i
+    return text[:head] + " … " + text[best_i:best_i + win]
+
+
+def hybrid(query, code=None, pool=200, k=60, cap=25, margin=2.0,
            types=("ley", "jurisprudencia"), include_derogadas=False, rerank=True):
     """Recuperación de máxima calidad para RESPUESTA legal (solo artículos de código;
     los temarios van por su stream de estudio aparte):
@@ -121,7 +137,7 @@ def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0,
         return []
 
     if rerank and embed.reranker_enabled():
-        sc = embed.rerank_scores(query, [rows[rid][6] for rid in cand])
+        sc = embed.rerank_scores(query, [_focus(query, rows[rid][6]) for rid in cand])
         order = sorted(zip(cand, sc), key=lambda x: -x[1])
         top = order[0][1]
         kept = [(rid, s) for rid, s in order if s >= top - margin] or order[:3]
@@ -150,7 +166,7 @@ def lexical(query, k=5, code=None):
 
 def get_article(num, code=None):
     con = sqlite3.connect(DB)
-    sql = "SELECT citation, structure, text, vigente FROM chunks WHERE article = ?"
+    sql = "SELECT citation, structure, text, vigente, reformas FROM chunks WHERE article = ?"
     args = [str(num)]
     if code:
         sql += " AND slug = ?"
@@ -177,10 +193,12 @@ def main():
 
     if a.art:
         rows = get_article(a.art, a.code)
-        for cite, struct, text, vig in rows or []:
+        for cite, struct, text, vig, reformas in rows or []:
             flag = "" if vig else "   ⚠ DEROGADO — NO es ley vigente"
             print(f"\n### {cite}{flag}" + (f"  ·  {struct}" if struct else ""))
             print(text)
+            if reformas:
+                print(f"   ↳ historia legislativa: {reformas}")
         if not rows:
             print("(sin resultados)")
         return

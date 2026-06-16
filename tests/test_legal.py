@@ -76,6 +76,33 @@ class TestConcordancias(unittest.TestCase):
     def test_lista_de_referencias(self):
         self.assertTrue({"5", "6", "7"}.issubset(graph.refs_in("los artículos 5, 6 y 7 establecen")))
 
+    def test_rango(self):
+        self.assertTrue({"5", "6", "7", "8", "9"}.issubset(
+            graph.refs_in("ver los artículos 5 a 9 de este Código")))
+
+
+class TestReformas(unittest.TestCase):
+    def test_separa_nota_sinalevi(self):
+        body = ("Toda persona tiene derecho a un nombre.\n\n(Nota de Sinalevi: Mediante "
+                "resolución de la Sala N° 1728, la frase del inciso a) es inconstitucional)")
+        op, notes = chunker.split_reformas(body)
+        self.assertEqual(op, "Toda persona tiene derecho a un nombre.")
+        self.assertEqual(len(notes), 1)
+        self.assertIn("inciso a)", notes[0])       # tolera paréntesis desbalanceado
+
+    def test_no_toca_parentesis_operativo(self):
+        body = "El vendedor (en adelante, el Comprador) entregará la cosa."
+        op, notes = chunker.split_reformas(body)
+        self.assertIn("(en adelante, el Comprador)", op)
+        self.assertEqual(notes, [])
+
+    def test_parrafo_nota_anidada(self):
+        body = "Texto operativo.\n\n(Derogado por el artículo 81 (actual 94) de la Ley Nº 7600)"
+        op, notes = chunker.split_reformas(body)
+        self.assertEqual(op, "Texto operativo.")
+        self.assertEqual(len(notes), 1)
+        self.assertIn("actual 94", notes[0])
+
 
 class TestChunker(unittest.TestCase):
     def test_troceo_y_vigencia(self):
