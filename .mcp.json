@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "legal-memory-cr": {
+      "command": "python",
+      "args": ["-m", "legal_rag.mcp_server"]
+    }
+  }
+}

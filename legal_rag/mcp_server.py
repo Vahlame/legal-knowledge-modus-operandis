@@ -17,7 +17,11 @@ Requisito: índice construido (python -m legal_rag.index).
 """
 import sys
 import json
+import pathlib
 
+# Hacer importable el repo desde cualquier cwd (un cliente MCP puede lanzarlo
+# desde otra carpeta), además de funcionar con `python -m legal_rag.mcp_server`.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from legal_rag import search, graph, advisor
 
 PROTOCOL = "2024-11-05"
