@@ -16,7 +16,7 @@ citando SIEMPRE la fuente** — sin inventar norma.
 |---|---|---|
 | F1 | Conversión PDF → Markdown, **fidelidad probada** (cero pérdida de comas) | ✅ |
 | F2 | Recuperación léxica FTS5 + citación | ✅ |
-| F3 | Recuperación **híbrida** (BM25 + semántica **neuronal**), **N adaptativo sin tope** | ✅ |
+| F3 | Recuperación **híbrida** (BM25 + neuronal + **reranking** cross-encoder), **N adaptativo** | ✅ |
 | F4 | **Grafo de concordancias** (cita / citado por / misma materia) | ✅ |
 | F5 | Capa de **asesoría + formación** (núcleo + relacionados + temario) | ✅ |
 | — | **Servidor MCP** (stdlib) para cualquier agente | ✅ |
@@ -75,10 +75,11 @@ Registrar en `mcp.json` / `.claude.json`:
 1. **Corpus** (`markdown/`) — un `## Artículo N` por artículo, con frontmatter. Fiel al PDF.
 2. **Conocimiento** — chunks por artículo + **grafo de concordancias** (refs internas,
    vecinos de capítulo) + temario como currículo.
-3. **Recuperación** (`legal_rag/search.py`) — FTS5 BM25 (exacto) ⊕ semántico **neuronal**
-   (`embed.py`: embeddings multilingües `paraphrase-multilingual-MiniLM`; fallback stdlib
-   tf-idf si no hay fastembed) fusionados por **RRF**, con **corte adaptativo** (≥ 30 % del
-   top, sin tope rígido).
+3. **Recuperación** (`legal_rag/search.py`) — para responder, **solo artículos de código**
+   (los temarios van por su stream de estudio). Pipeline: BM25 ⊕ semántico neuronal →
+   **RRF** (recall) → **reranking cross-encoder** multilingüe (`jina-reranker-v2`, evalúa
+   pregunta + artículo juntos = precisión) → **corte adaptativo** por margen de score.
+   Degrada solo: sin reranker → RRF; sin fastembed → embedder stdlib tf-idf.
 4. **Concordancias** (`legal_rag/graph.py`) — `related(art)` = cita + citado_por + misma materia.
 5. **Asesoría** (`legal_rag/advisor.py`) — ensambla el bundle que el agente razona;
    `mcp_server.py` lo publica por MCP.
@@ -97,10 +98,11 @@ ordinales); solo deligadura tipográfica (`ﬁ`→`fi`).
 - **N adaptativo**: nunca un tope fijo de artículos — devuelve todos los relevantes.
 - **Relacionados primero**: un caso necesita la norma *y su red* (concordancias).
 - **Formación**: los temarios son el currículo del examen de incorporación (CAACR).
-- **Mejor recuperación con fallback**: backend neuronal por defecto (capta sinónimos
-  reales: inquilino≈arrendatario, donde el léxico falla); si falta fastembed, cae a un
-  embedder stdlib de cero dependencias. Forzar con `LEGAL_EMBEDDER=stdlib|neural`. Para
-  máxima calidad (pesado, 2.24 GB) se puede fijar `intfloat/multilingual-e5-large`.
+- **Calidad primero (latencia secundaria)**: bi-encoder neuronal para *recall* +
+  **reranker cross-encoder** para *precisión* (encuentra el artículo exacto: "homicidio
+  culposo" → art. 117 #1; "responsabilidad por daño" → art. 1045 #1). Degradación elegante:
+  sin reranker → RRF; sin fastembed → embedder stdlib de cero deps.
+  Overrides: `LEGAL_EMBEDDER=stdlib|neural`, `LEGAL_RERANK=0`.
 
 ## Corpus
 

@@ -109,3 +109,35 @@ def select_backend():
     if pref in ("stdlib", "neural"):
         return pref
     return "neural" if neural_available() else "stdlib"
+
+
+# ---------------------------------------------------------------------------
+# Reranker (cross-encoder) opcional — el mayor salto de precisión: evalúa la
+# pregunta y el artículo JUNTOS y reordena los candidatos. Multilingüe.
+# Si no está, la búsqueda se queda en el orden RRF.  LEGAL_RERANK=0 lo desactiva.
+# ---------------------------------------------------------------------------
+RERANK_MODEL_NAME = "jinaai/jina-reranker-v2-base-multilingual"
+_reranker_model = None
+
+
+def reranker_enabled():
+    if os.environ.get("LEGAL_RERANK", "").strip() == "0":
+        return False
+    try:
+        from fastembed.rerank.cross_encoder import TextCrossEncoder  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _reranker():
+    global _reranker_model
+    if _reranker_model is None:
+        from fastembed.rerank.cross_encoder import TextCrossEncoder
+        _reranker_model = TextCrossEncoder(RERANK_MODEL_NAME)
+    return _reranker_model
+
+
+def rerank_scores(query, passages):
+    """Score de relevancia (cross-encoder) por cada (query, passage); más alto = mejor."""
+    return [float(s) for s in _reranker().rerank(query, list(passages))]

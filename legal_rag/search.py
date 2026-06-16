@@ -81,8 +81,19 @@ def _semantic_rank(con, query, pool):
     return _semantic_stdlib(con, query, pool)
 
 
-def hybrid(query, code=None, pool=120, k=60, ratio=0.30, cap=40):
-    """RRF(BM25, semántico) + corte adaptativo (>= ratio*top, máx cap)."""
+def _pack(row, score):
+    slug, article, cite, struct, kind, text = row
+    return {"score": round(float(score), 4), "slug": slug, "article": article,
+            "citation": cite, "structure": struct, "kind": kind, "text": text}
+
+
+def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, kinds=("codigo",), rerank=True):
+    """Recuperación de máxima calidad para RESPUESTA legal (solo artículos de código;
+    los temarios van por su stream de estudio aparte):
+       1) candidatos = RRF(BM25, semántico)  -> recall
+       2) RERANK cross-encoder (pregunta+artículo juntos) -> precisión
+       3) corte ADAPTATIVO por margen de score respecto al top (sin tope fijo).
+    Si no hay reranker, cae al orden RRF con corte por ratio."""
     con = sqlite3.connect(DB)
     rrf = defaultdict(float)
     for pos, rid in enumerate(_bm25_rank(con, query, pool, code)):
@@ -92,24 +103,31 @@ def hybrid(query, code=None, pool=120, k=60, ratio=0.30, cap=40):
     if not rrf:
         con.close()
         return []
-    fused = sorted(rrf.items(), key=lambda x: -x[1])
-    top = fused[0][1]
-    out = []
-    for rid, s in fused[:cap]:
-        if s < ratio * top:
-            break
-        row = con.execute(
-            "SELECT slug, article, citation, structure, kind, text FROM chunks WHERE rowid = ?", (rid,)
+
+    cand = [rid for rid, _ in sorted(rrf.items(), key=lambda x: -x[1])[:pool]]
+    rows = {}
+    for rid in cand:
+        r = con.execute(
+            "SELECT slug, article, citation, structure, kind, text FROM chunks WHERE rowid=?", (rid,)
         ).fetchone()
-        if not row:
-            continue
-        slug, article, cite, struct, kind, text = row
-        if code and slug != code:
-            continue
-        out.append({"rowid": rid, "score": round(s, 5), "slug": slug, "article": article,
-                    "citation": cite, "structure": struct, "kind": kind, "text": text})
+        if r and (kinds is None or r[4] in kinds) and not (code and r[0] != code):
+            rows[rid] = r
     con.close()
-    return out
+    cand = [rid for rid in cand if rid in rows]
+    if not cand:
+        return []
+
+    if rerank and embed.reranker_enabled():
+        sc = embed.rerank_scores(query, [rows[rid][5] for rid in cand])
+        order = sorted(zip(cand, sc), key=lambda x: -x[1])
+        top = order[0][1]
+        kept = [(rid, s) for rid, s in order if s >= top - margin] or order[:3]
+        return [_pack(rows[rid], s) for rid, s in kept[:cap]]
+
+    # fallback sin reranker: orden RRF con corte por ratio del top
+    order = sorted(((rid, s) for rid, s in rrf.items() if rid in rows), key=lambda x: -x[1])
+    top = order[0][1]
+    return [_pack(rows[rid], s) for rid, s in order if s >= 0.30 * top][:cap]
 
 
 def lexical(query, k=5, code=None):
