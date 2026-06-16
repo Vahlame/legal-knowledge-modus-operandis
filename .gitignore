@@ -1,0 +1,16 @@
+# Artefactos regenerables (se reconstruyen con: python -m legal_rag.index)
+legal.db
+legal_graph.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.egg-info/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
