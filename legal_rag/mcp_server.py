@@ -66,7 +66,8 @@ def call_tool(name, args):
                  "structure": r["structure"], "score": r["score"], "text": r["text"]} for r in res]
     if name == "legal_article":
         rows = search.get_article(args["article"], args.get("code"))
-        return [{"citation": c, "structure": s, "text": t} for c, s, t in rows]
+        return [{"citation": c, "structure": s, "vigente": bool(v), "derogado": not bool(v),
+                 "text": t} for c, s, t, v in rows]
     if name == "legal_related":
         return graph.related(args["code"], args["article"])
     if name == "legal_consult":

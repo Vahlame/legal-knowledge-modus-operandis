@@ -33,7 +33,7 @@ def _excerpt(t, n=220):
 
 def _article_row(con, slug, art):
     return con.execute(
-        "SELECT citation, structure, text FROM chunks WHERE slug=? AND article=? LIMIT 1",
+        "SELECT citation, structure, text, vigente FROM chunks WHERE slug=? AND article=? LIMIT 1",
         (slug, art)).fetchone()
 
 
@@ -75,9 +75,10 @@ def consult(question, code=None, expand_top=6, neighbor_top=2, max_related=40):
     for slug, art in order[:max_related]:
         row = _article_row(con, slug, art)
         if row:
-            cite, struct, text = row
+            cite, struct, text, vig = row
             related_items.append({"slug": slug, "article": art, "relation": related[(slug, art)],
-                                  "citation": cite, "structure": struct, "excerpt": _excerpt(text)})
+                                  "citation": cite, "structure": struct, "vigente": bool(vig),
+                                  "excerpt": _excerpt(text)})
 
     topics = _topic_hits(con, question)
     con.close()
@@ -124,7 +125,8 @@ def format_consult(b):
         for rel in ("cita", "citado_por", "misma_materia"):
             items = rg.get(rel, [])
             if items:
-                out.append(f"  [{labels[rel]}] " + " · ".join(r["citation"] for r in items))
+                out.append(f"  [{labels[rel]}] " + " · ".join(
+                    r["citation"] + ("" if r.get("vigente", True) else " ⚠DEROG") for r in items))
 
     if b["topics"]:
         out.append("\n════ TEMARIO · guía de estudio (NO es la ley) ════")

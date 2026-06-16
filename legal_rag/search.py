@@ -82,13 +82,14 @@ def _semantic_rank(con, query, pool):
 
 
 def _pack(row, score):
-    slug, article, cite, struct, doc_type, rama, text, name = row
+    slug, article, cite, struct, doc_type, rama, text, name, vigente = row
     return {"score": round(float(score), 4), "slug": slug, "article": article, "citation": cite,
-            "structure": struct, "doc_type": doc_type, "rama": rama, "name": name, "text": text}
+            "structure": struct, "doc_type": doc_type, "rama": rama, "name": name,
+            "vigente": bool(vigente), "text": text}
 
 
 def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0,
-           types=("ley", "jurisprudencia"), rerank=True):
+           types=("ley", "jurisprudencia"), include_derogadas=False, rerank=True):
     """Recuperación de máxima calidad para RESPUESTA legal (solo artículos de código;
     los temarios van por su stream de estudio aparte):
        1) candidatos = RRF(BM25, semántico)  -> recall
@@ -109,9 +110,10 @@ def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0,
     rows = {}
     for rid in cand:
         r = con.execute(
-            "SELECT slug, article, citation, structure, doc_type, rama, text, name FROM chunks WHERE rowid=?",
-            (rid,)).fetchone()
-        if r and (types is None or r[4] in types) and not (code and r[0] != code):
+            "SELECT slug, article, citation, structure, doc_type, rama, text, name, vigente "
+            "FROM chunks WHERE rowid=?", (rid,)).fetchone()
+        if r and (types is None or r[4] in types) and not (code and r[0] != code) \
+                and (include_derogadas or r[8] == 1):
             rows[rid] = r
     con.close()
     cand = [rid for rid in cand if rid in rows]
@@ -148,7 +150,7 @@ def lexical(query, k=5, code=None):
 
 def get_article(num, code=None):
     con = sqlite3.connect(DB)
-    sql = "SELECT citation, structure, text FROM chunks WHERE article = ?"
+    sql = "SELECT citation, structure, text, vigente FROM chunks WHERE article = ?"
     args = [str(num)]
     if code:
         sql += " AND slug = ?"
@@ -175,8 +177,9 @@ def main():
 
     if a.art:
         rows = get_article(a.art, a.code)
-        for cite, struct, text in rows or []:
-            print(f"\n### {cite}" + (f"  ·  {struct}" if struct else ""))
+        for cite, struct, text, vig in rows or []:
+            flag = "" if vig else "   ⚠ DEROGADO — NO es ley vigente"
+            print(f"\n### {cite}{flag}" + (f"  ·  {struct}" if struct else ""))
             print(text)
         if not rows:
             print("(sin resultados)")

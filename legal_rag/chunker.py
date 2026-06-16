@@ -11,6 +11,18 @@ from legal_rag import sources
 
 ART_RE = re.compile(r"^Art[ií]culo\s+(.+)$")
 
+# Norma muerta: el cuerpo del artículo EMPIEZA con la marca de derogación en forma
+# pasiva ("Derogado/Derogada"). NO se confunde con cláusulas operativas que derogan
+# OTRAS normas ("Deróguese...", "Quedan derogadas las disposiciones que se opongan"),
+# que sí son ley vigente. Por eso se ancla a ^ y se exige el participio.
+_DEROG = re.compile(
+    r"^\(?\s*(?:derogad[oa]s?\b|sin\s+vigencia\b|t[eé]ngase\s+por\s+derogad)", re.I)
+
+
+def es_vigente(text: str) -> bool:
+    """False si el artículo está derogado/sin vigencia (no es ley aplicable)."""
+    return not _DEROG.match(text.strip())
+
 
 def parse_frontmatter(text: str):
     if text.startswith("---"):
@@ -40,6 +52,7 @@ def chunk_file(path: pathlib.Path):
         if cur is not None:
             cur["text"] = "\n".join(buf).strip()
             if cur["text"]:
+                cur["vigente"] = 1 if (cur["doc_type"] != "ley" or es_vigente(cur["text"])) else 0
                 chunks.append(cur)
 
     for line in body.splitlines():
@@ -67,5 +80,5 @@ def chunk_file(path: pathlib.Path):
             if len(p) < 15:
                 continue
             chunks.append({**base, "heading": name, "article": None, "structure": "",
-                           "section": f"{slug}#0", "citation": name, "text": p})
+                           "section": f"{slug}#0", "citation": name, "text": p, "vigente": 1})
     return chunks

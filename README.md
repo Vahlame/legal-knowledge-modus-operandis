@@ -33,6 +33,7 @@ python scripts/convert_pdfs.py            # 1) PDFs -> markdown/  (fiel)
 python scripts/verify_fidelity.py         # 2) auditar fidelidad (debe dar 14/14 OK)
 python -m legal_rag.index                 # 3) índice híbrido (neuronal) + grafo
 python -m legal_rag.advisor "puede el inquilino subarrendar"   # 4) asesoría
+python -m unittest discover -s tests -v   # 5) tests de regresión (cero dependencias)
 ```
 
 ## Uso (CLI)
@@ -95,6 +96,7 @@ ordinales); solo deligadura tipográfica (`ﬁ`→`fi`).
 ## Principios de diseño
 
 - **Anti-alucinación**: el agente cita artículo y código; todo sale del corpus indexado.
+- **Vigencia (no cita norma muerta)**: ~409 artículos derogados se detectan, se **excluyen** de las respuestas y se marcan `⚠ DEROGADO` en el lookup exacto. `include_derogadas=True` para verlos a propósito.
 - **N adaptativo**: nunca un tope fijo de artículos — devuelve todos los relevantes.
 - **Relacionados primero**: un caso necesita la norma *y su red* (concordancias).
 - **Formación**: los temarios son el currículo del examen de incorporación (CAACR).
