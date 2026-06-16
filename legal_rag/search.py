@@ -20,6 +20,8 @@ from collections import defaultdict
 from legal_rag import embed
 
 DB = pathlib.Path(__file__).resolve().parent.parent / "legal.db"
+VEC_PATH = pathlib.Path(__file__).resolve().parent.parent / "legal_vectors.npy"
+_NEURAL_VEC = None  # caché de la matriz densa (se carga una vez)
 
 
 def _fts_match(q: str) -> str:
@@ -38,7 +40,22 @@ def _bm25_rank(con, query, pool, code):
     return [r[0] for r in con.execute(sql, args).fetchall()]
 
 
-def _semantic_rank(con, query, pool):
+def _embedder(con):
+    row = con.execute("SELECT v FROM seminfo WHERE k='embedder'").fetchone()
+    return row[0] if row else "stdlib"
+
+
+def _semantic_neural(query, pool):
+    import numpy as np
+    global _NEURAL_VEC
+    if _NEURAL_VEC is None:
+        _NEURAL_VEC = np.load(VEC_PATH)
+    q = embed.neural_encode([query], kind="query")[0]   # (dim,) normalizado
+    scores = _NEURAL_VEC @ q                      # coseno vs todos los chunks
+    return [int(i) + 1 for i in np.argsort(-scores)[:pool]]   # rowid = i+1
+
+
+def _semantic_stdlib(con, query, pool):
     ct = embed.counter(query)
     dims = list({embed.h(f) for f in ct})
     if not dims:
@@ -56,6 +73,12 @@ def _semantic_rank(con, query, pool):
         for rid, cw in json.loads(data):
             scores[rid] += qw * cw
     return [rid for rid, _ in sorted(scores.items(), key=lambda x: -x[1])[:pool]]
+
+
+def _semantic_rank(con, query, pool):
+    if _embedder(con).startswith("neural"):
+        return _semantic_neural(query, pool)
+    return _semantic_stdlib(con, query, pool)
 
 
 def hybrid(query, code=None, pool=120, k=60, ratio=0.30, cap=40):

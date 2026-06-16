@@ -1,5 +1,6 @@
 # Artefactos regenerables (se reconstruyen con: python -m legal_rag.index)
 legal.db
+legal_vectors.npy
 legal_graph.json
 
 # Python

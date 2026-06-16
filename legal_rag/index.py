@@ -1,9 +1,11 @@
 """
 Construye el índice híbrido sobre los chunks legales:
   - FTS5 BM25 (léxico, término exacto)
-  - Semántico stdlib (tf-idf disperso, índice invertido por dimensión) + idf
+  - Semántico: NEURONAL (fastembed, recomendado) o stdlib tf-idf (fallback sin deps)
+  - Grafo de concordancias (F4)
 
-Ejecutar:  python -m legal_rag.index
+El backend semántico se elige solo: neuronal si fastembed está instalado, si no stdlib.
+Forzar con  LEGAL_EMBEDDER=stdlib|neural.   Ejecutar:  python -m legal_rag.index
 """
 import sqlite3
 import pathlib
@@ -17,6 +19,42 @@ from legal_rag import embed, graph
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MD_DIR = ROOT / "markdown"
 DB = ROOT / "legal.db"
+VEC_PATH = ROOT / "legal_vectors.npy"
+
+
+def _build_semantic(con, chunks):
+    """Crea las estructuras semánticas; devuelve (etiqueta_embedder, descripción)."""
+    N = len(chunks)
+    backend = embed.select_backend()
+    texts = [" ".join([c["heading"], c["structure"], c["text"]]) for c in chunks]
+
+    if backend == "neural":
+        import numpy as np
+        vecs = embed.neural_encode(texts)        # (N, dim), L2-normalizado
+        np.save(VEC_PATH, vecs)
+        return "neural:" + embed.NEURAL_MODEL_NAME, f"neuronal {vecs.shape[1]}d"
+
+    # --- stdlib tf-idf disperso (sin dependencias) ---
+    if VEC_PATH.exists():
+        VEC_PATH.unlink()
+    counters, df = [], Counter()
+    for t in texts:
+        ct = embed.counter(t)
+        counters.append(ct)
+        for d in {embed.h(f) for f in ct}:
+            df[d] += 1
+    idf = {d: math.log(N / v) for d, v in df.items() if 0 < v < N}
+    postings = defaultdict(list)
+    for rowid, ct in enumerate(counters, start=1):
+        for d, w in embed.vector(ct, idf).items():
+            postings[d].append((rowid, round(w, 5)))
+    con.execute("CREATE TABLE sempost(dim INTEGER PRIMARY KEY, data TEXT)")
+    con.executemany("INSERT INTO sempost VALUES(?,?)",
+                    [(d, json.dumps(p)) for d, p in postings.items()])
+    con.execute("CREATE TABLE semidf(dim INTEGER PRIMARY KEY, v REAL)")
+    con.executemany("INSERT INTO semidf VALUES(?,?)",
+                    [(d, round(v, 5)) for d, v in idf.items()])
+    return embed.NAME, f"{embed.NAME}, {len(postings)} dims"
 
 
 def build():
@@ -39,39 +77,16 @@ def build():
           c["structure"], c["citation"], c["text"], c["section"]) for c in chunks],
     )
 
-    # --- capa semántica ---
-    counters, df = [], Counter()
-    for c in chunks:
-        ct = embed.counter(" ".join([c["heading"], c["structure"], c["text"]]))
-        counters.append(ct)
-        for d in {embed.h(f) for f in ct}:
-            df[d] += 1
-    N = len(chunks)
-    idf = {d: math.log(N / v) for d, v in df.items() if 0 < v < N}
-
-    postings = defaultdict(list)
-    for rowid, ct in enumerate(counters, start=1):     # rowid FTS5 = orden de inserción
-        for d, w in embed.vector(ct, idf).items():
-            postings[d].append((rowid, round(w, 5)))
-
-    con.execute("CREATE TABLE sempost(dim INTEGER PRIMARY KEY, data TEXT)")
-    con.executemany("INSERT INTO sempost VALUES(?,?)",
-                    [(d, json.dumps(p)) for d, p in postings.items()])
-    con.execute("CREATE TABLE semidf(dim INTEGER PRIMARY KEY, v REAL)")
-    con.executemany("INSERT INTO semidf VALUES(?,?)",
-                    [(d, round(v, 5)) for d, v in idf.items()])
+    embedder, sem_desc = _build_semantic(con, chunks)
     con.execute("CREATE TABLE seminfo(k TEXT PRIMARY KEY, v TEXT)")
     con.executemany("INSERT INTO seminfo VALUES(?,?)",
-                    [("N", str(N)), ("embedder", embed.NAME), ("dims", str(len(postings)))])
+                    [("N", str(len(chunks))), ("embedder", embedder)])
 
-    # --- grafo de concordancias (F4) ---
     n_edges = graph.build_into(con, chunks)
-
     con.commit()
     con.close()
-    print(f"Indexados {N} chunks de {len(docs)} documentos "
-          f"(BM25 + semántico '{embed.NAME}', {len(postings)} dims, "
-          f"{n_edges} concordancias) -> {DB}")
+    print(f"Indexados {len(chunks)} chunks de {len(docs)} documentos "
+          f"(BM25 + {sem_desc}, {n_edges} concordancias) -> {DB}")
 
 
 if __name__ == "__main__":

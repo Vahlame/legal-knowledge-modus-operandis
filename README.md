@@ -6,8 +6,9 @@ como **servidor MCP**, para que un agente de IA **asesore casos y forme abogados
 citando SIEMPRE la fuente** — sin inventar norma.
 
 > Encargo para despacho legal. Mismo ADN que un sistema de memoria híbrido (BM25 +
-> semántico + RRF, *passage-first*), pero dedicado al dominio jurídico y **portátil:
-> núcleo Python sin dependencias** (salvo la conversión inicial de PDFs).
+> semántico + RRF, *passage-first*), pero dedicado al dominio jurídico. **Portátil**:
+> backend semántico neuronal (fastembed) por defecto, con fallback automático a un
+> embedder stdlib de cero dependencias.
 
 ## Estado — completo
 
@@ -15,19 +16,22 @@ citando SIEMPRE la fuente** — sin inventar norma.
 |---|---|---|
 | F1 | Conversión PDF → Markdown, **fidelidad probada** (cero pérdida de comas) | ✅ |
 | F2 | Recuperación léxica FTS5 + citación | ✅ |
-| F3 | Recuperación **híbrida** (BM25 + semántica), **N adaptativo sin tope** | ✅ |
+| F3 | Recuperación **híbrida** (BM25 + semántica **neuronal**), **N adaptativo sin tope** | ✅ |
 | F4 | **Grafo de concordancias** (cita / citado por / misma materia) | ✅ |
 | F5 | Capa de **asesoría + formación** (núcleo + relacionados + temario) | ✅ |
 | — | **Servidor MCP** (stdlib) para cualquier agente | ✅ |
 
 ## Arranque rápido
 
-Requisitos: Python 3.11+. Solo para *reconvertir* PDFs: `pip install pymupdf4llm`.
+Requisitos: Python 3.11+ y `pip install -r requirements.txt` (instala `fastembed` para el
+backend neuronal — baja ~0.22 GB de modelo la 1ª vez — y `pymupdf4llm` para reconvertir).
+Si `fastembed` no está, el sistema cae solo al embedder stdlib (cero dependencias).
 
 ```powershell
+pip install -r requirements.txt
 python scripts/convert_pdfs.py            # 1) PDFs -> markdown/  (fiel)
 python scripts/verify_fidelity.py         # 2) auditar fidelidad (debe dar 14/14 OK)
-python -m legal_rag.index                 # 3) construir índice híbrido + grafo
+python -m legal_rag.index                 # 3) índice híbrido (neuronal) + grafo
 python -m legal_rag.advisor "puede el inquilino subarrendar"   # 4) asesoría
 ```
 
@@ -71,9 +75,10 @@ Registrar en `mcp.json` / `.claude.json`:
 1. **Corpus** (`markdown/`) — un `## Artículo N` por artículo, con frontmatter. Fiel al PDF.
 2. **Conocimiento** — chunks por artículo + **grafo de concordancias** (refs internas,
    vecinos de capítulo) + temario como currículo.
-3. **Recuperación** (`legal_rag/search.py`) — FTS5 BM25 (exacto) ⊕ semántico tf-idf
-   (`embed.py`: hashing de palabras + n-gramas de caracteres para morfología) fusionados
-   por **RRF**, con **corte adaptativo** (≥ 30 % del top, sin tope rígido).
+3. **Recuperación** (`legal_rag/search.py`) — FTS5 BM25 (exacto) ⊕ semántico **neuronal**
+   (`embed.py`: embeddings multilingües `paraphrase-multilingual-MiniLM`; fallback stdlib
+   tf-idf si no hay fastembed) fusionados por **RRF**, con **corte adaptativo** (≥ 30 % del
+   top, sin tope rígido).
 4. **Concordancias** (`legal_rag/graph.py`) — `related(art)` = cita + citado_por + misma materia.
 5. **Asesoría** (`legal_rag/advisor.py`) — ensambla el bundle que el agente razona;
    `mcp_server.py` lo publica por MCP.
@@ -92,8 +97,10 @@ ordinales); solo deligadura tipográfica (`ﬁ`→`fi`).
 - **N adaptativo**: nunca un tope fijo de artículos — devuelve todos los relevantes.
 - **Relacionados primero**: un caso necesita la norma *y su red* (concordancias).
 - **Formación**: los temarios son el currículo del examen de incorporación (CAACR).
-- **Portátil**: núcleo stdlib; el embedder neuronal (fastembed) es un upgrade opcional
-  detrás de la misma interfaz (`embed.py`) para recall de sinónimos reales.
+- **Mejor recuperación con fallback**: backend neuronal por defecto (capta sinónimos
+  reales: inquilino≈arrendatario, donde el léxico falla); si falta fastembed, cae a un
+  embedder stdlib de cero dependencias. Forzar con `LEGAL_EMBEDDER=stdlib|neural`. Para
+  máxima calidad (pesado, 2.24 GB) se puede fijar `intfloat/multilingual-e5-large`.
 
 ## Corpus
 
@@ -103,6 +110,6 @@ Abogadas de Costa Rica. **3.274 artículos**, 5.112 chunks, 1.946 concordancias.
 
 ## Roadmap
 
-- Embedder neuronal opcional (sinónimos reales: inquilino≈arrendatario).
 - Concordancias **cross-código** (sustantivo ↔ procesal).
 - Mapa explícito temario→artículos para rutas de estudio.
+- Modelo neuronal de máxima calidad (e5-large) como opción para despliegues con recursos.

@@ -1,0 +1,10 @@
+# --- Conversión del corpus (solo para reconvertir los PDFs) ---
+pymupdf4llm>=0.0.17
+
+# --- Backend semántico neuronal (recomendado, por defecto) ---
+# Embeddings multilingües (paraphrase-multilingual-MiniLM-L12-v2, ~0.22 GB la
+# primera vez). Si NO se instala, el sistema cae solo al embedder stdlib
+# (cero dependencias). Para forzar uno u otro: env LEGAL_EMBEDDER=stdlib|neural.
+fastembed>=0.4
+
+# numpy lo arrastra fastembed; se usa para el índice denso.
