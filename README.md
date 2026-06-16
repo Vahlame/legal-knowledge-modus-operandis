@@ -21,55 +21,68 @@ citando SIEMPRE la fuente** — sin inventar norma.
 | F5 | Capa de **asesoría + formación** (núcleo + relacionados + temario) | ✅ |
 | — | **Servidor MCP** (stdlib) para cualquier agente | ✅ |
 
-## Arranque rápido
+## Instalación (1 comando)
 
-Requisitos: Python 3.11+ y `pip install -r requirements.txt` (instala `fastembed` para el
-backend neuronal — baja ~0.22 GB de modelo la 1ª vez — y `pymupdf4llm` para reconvertir).
-Si `fastembed` no está, el sistema cae solo al embedder stdlib (cero dependencias).
+Requisitos: **Python 3.11+** y git. Clona el repo y corre el instalador:
 
 ```powershell
-pip install -r requirements.txt
-python scripts/convert_pdfs.py            # 1) PDFs -> markdown/  (fiel)
-python scripts/verify_fidelity.py         # 2) auditar fidelidad (debe dar 14/14 OK)
-python -m legal_rag.index                 # 3) índice híbrido (neuronal) + grafo
-python -m legal_rag.advisor "puede el inquilino subarrendar"   # 4) asesoría
-python -m unittest discover -s tests -v   # 5) tests de regresión (cero dependencias)
+# Windows (PowerShell)
+git clone https://github.com/Vahlame/legal-knowledge-modus-operandis
+cd legal-knowledge-modus-operandis ; ./install.ps1
 ```
+```bash
+# macOS / Linux
+git clone https://github.com/Vahlame/legal-knowledge-modus-operandis
+cd legal-knowledge-modus-operandis && ./install.sh
+```
+
+El instalador, a potencia completa: `pip install -e .` (motor neuronal + reranker),
+construye el índice + cachea modelos, y registra el MCP en **Codex** y **Claude Code**.
+Reinicia tu agente y listo.
+
+Equivalente manual (todo vía `python -m legal_rag`, sin depender del PATH):
+
+```powershell
+pip install -e .                      # potencia completa (fastembed: neuronal + reranker)
+python -m legal_rag setup             # índice + grafo + cachea modelos (~1.3 GB la 1ª vez)
+python -m legal_rag register --all    # Codex + Claude Code (+ Cursor con --cursor)
+python -m legal_rag doctor            # diagnóstico
+```
+> Si `fastembed` no instala en tu plataforma, el sistema cae solo al embedder stdlib
+> (cero dependencias) — sigue funcionando, con menos recall semántico.
 
 ## Uso (CLI)
 
 ```powershell
-# Búsqueda híbrida, N adaptativo (devuelve todos los relevantes, no un tope fijo)
-python -m legal_rag.search que pasa si no pago la pension alimentaria
-python -m legal_rag.search prescripcion adquisitiva --code codigo-civil-2026
-python -m legal_rag.search homicidio culposo --lexical      # solo BM25
-
-# Artículo exacto (texto VERBATIM)
-python -m legal_rag.search --art 1045 --code codigo-civil-2026
-
-# Concordancias: artículos relacionados que ayudan al caso
-python -m legal_rag.graph --art 1124 --code codigo-civil-2026
-
-# Asesoría completa: núcleo + relacionados + temario, todo citado
-python -m legal_rag.advisor "responsabilidad por danos que causa un animal" --code codigo-civil-2026
+python -m legal_rag consult "que pasa si no pago la pension alimentaria"
+python -m legal_rag search  "prescripcion adquisitiva" --code codigo-civil-2026
+python -m legal_rag article 1045 --code codigo-civil-2026   # VERBATIM + vigencia + reformas
+python -m unittest discover -s tests                        # regresión (cero dependencias)
 ```
+(Si el directorio *Scripts* de Python está en tu PATH, también sirve `legal-memory <cmd>`.)
 
-## Servidor MCP (para agentes)
+## Agentes (MCP)
 
-Expone 4 herramientas: `legal_search`, `legal_article`, `legal_related`, `legal_consult`.
-Registrar en `mcp.json` / `.claude.json`:
+`register` deja el servidor `legal-memory-cr` (tools `legal_search`, `legal_article`,
+`legal_related`, `legal_consult` — todas citan la fuente) listo en:
 
-```json
-{
-  "mcpServers": {
-    "legal-memory-cr": {
-      "command": "python",
-      "args": ["-m", "legal_rag.mcp_server"],
-      "cwd": "C:/Users/DEV/Documents/GitHub/legal knowledge & modus operandis"
-    }
-  }
-}
+- **Codex** → `~/.codex/config.toml`
+- **Claude Code** → `.mcp.json` del repo (in-project) y/o `~/.claude.json` (global)
+- **Cursor** → `~/.cursor/mcp.json`  ·  cualquier otro cliente MCP usa la misma invocación.
+
+Invocación robusta (sin depender del PATH; `<python>` = ruta absoluta del intérprete):
+
+```toml
+# Codex — ~/.codex/config.toml
+[mcp_servers.legal-memory-cr]
+command = "<python>"
+args = ["-m", "legal_rag.mcp_server"]
 ```
+```jsonc
+// Claude Code / Cursor / genérico — dentro de "mcpServers"
+"legal-memory-cr": { "command": "<python>", "args": ["-m", "legal_rag.mcp_server"] }
+```
+`python -m legal_rag register --dry-run --all` imprime exactamente qué escribirá en cada agente.
 
 ## Arquitectura (5 capas)
 

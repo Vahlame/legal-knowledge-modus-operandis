@@ -23,7 +23,7 @@ import pathlib
 
 from legal_rag import search, graph
 
-DB = pathlib.Path(__file__).resolve().parent.parent / "legal.db"
+from legal_rag.paths import DB
 
 
 def _excerpt(t, n=220):

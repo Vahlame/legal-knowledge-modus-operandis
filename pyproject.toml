@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legal-memory-cr"
+version = "0.1.0"
+description = "Memoria legal RAG de derecho costarricense para agentes de IA (MCP: Codex, Claude Code, etc.)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+# Potencia completa por defecto: fastembed trae el bi-encoder neuronal + el reranker.
+# Si fastembed no instala en una plataforma, el sistema cae solo al embedder stdlib.
+dependencies = [
+    "fastembed>=0.4",
+]
+
+[project.optional-dependencies]
+# Solo necesario para RE-CONVERTIR los PDFs a Markdown (el corpus ya viene convertido).
+convert = ["pymupdf4llm>=0.0.17"]
+
+[project.scripts]
+legal-memory = "legal_rag.cli:main"
+legal-memory-mcp = "legal_rag.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["legal_rag*"]

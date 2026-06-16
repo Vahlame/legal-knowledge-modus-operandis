@@ -16,10 +16,7 @@ from collections import defaultdict, Counter
 from legal_rag.chunker import chunk_file
 from legal_rag import embed, graph
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-MD_DIR = ROOT / "markdown"
-DB = ROOT / "legal.db"
-VEC_PATH = ROOT / "legal_vectors.npy"
+from legal_rag.paths import DB, VEC as VEC_PATH, MD_DIR
 
 
 def _build_semantic(con, chunks):

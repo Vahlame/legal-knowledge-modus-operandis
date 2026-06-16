@@ -19,8 +19,7 @@ from collections import defaultdict
 
 from legal_rag import embed
 
-DB = pathlib.Path(__file__).resolve().parent.parent / "legal.db"
-VEC_PATH = pathlib.Path(__file__).resolve().parent.parent / "legal_vectors.npy"
+from legal_rag.paths import DB, VEC as VEC_PATH
 _NEURAL_VEC = None  # caché de la matriz densa (se carga una vez)
 
 

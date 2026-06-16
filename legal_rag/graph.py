@@ -17,7 +17,7 @@ import re
 import sqlite3
 import pathlib
 
-DB = pathlib.Path(__file__).resolve().parent.parent / "legal.db"
+from legal_rag.paths import DB
 
 # "artículo(s) N", "artículos 5, 6 y 7", "artículos 5 a 9", "artículo 408 bis"
 REF_HEAD = re.compile(
