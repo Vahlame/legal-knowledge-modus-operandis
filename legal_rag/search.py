@@ -82,12 +82,12 @@ def _semantic_rank(con, query, pool):
 
 
 def _pack(row, score):
-    slug, article, cite, struct, kind, text = row
-    return {"score": round(float(score), 4), "slug": slug, "article": article,
-            "citation": cite, "structure": struct, "kind": kind, "text": text}
+    slug, article, cite, struct, doc_type, rama, text = row
+    return {"score": round(float(score), 4), "slug": slug, "article": article, "citation": cite,
+            "structure": struct, "doc_type": doc_type, "rama": rama, "text": text}
 
 
-def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, kinds=("codigo",), rerank=True):
+def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, types=("ley",), rerank=True):
     """Recuperación de máxima calidad para RESPUESTA legal (solo artículos de código;
     los temarios van por su stream de estudio aparte):
        1) candidatos = RRF(BM25, semántico)  -> recall
@@ -108,9 +108,9 @@ def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, kinds=("codigo"
     rows = {}
     for rid in cand:
         r = con.execute(
-            "SELECT slug, article, citation, structure, kind, text FROM chunks WHERE rowid=?", (rid,)
-        ).fetchone()
-        if r and (kinds is None or r[4] in kinds) and not (code and r[0] != code):
+            "SELECT slug, article, citation, structure, doc_type, rama, text FROM chunks WHERE rowid=?",
+            (rid,)).fetchone()
+        if r and (types is None or r[4] in types) and not (code and r[0] != code):
             rows[rid] = r
     con.close()
     cand = [rid for rid in cand if rid in rows]
@@ -118,7 +118,7 @@ def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, kinds=("codigo"
         return []
 
     if rerank and embed.reranker_enabled():
-        sc = embed.rerank_scores(query, [rows[rid][5] for rid in cand])
+        sc = embed.rerank_scores(query, [rows[rid][6] for rid in cand])
         order = sorted(zip(cand, sc), key=lambda x: -x[1])
         top = order[0][1]
         kept = [(rid, s) for rid, s in order if s >= top - margin] or order[:3]
@@ -132,7 +132,7 @@ def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, kinds=("codigo"
 
 def lexical(query, k=5, code=None):
     con = sqlite3.connect(DB)
-    sql = ("SELECT citation, structure, kind, snippet(chunks, 7, '«', '»', ' … ', 16), rank "
+    sql = ("SELECT citation, structure, doc_type, snippet(chunks, 7, '«', '»', ' … ', 16), rank "
            "FROM chunks WHERE chunks MATCH ?")
     args = [_fts_match(query)]
     if code:
@@ -184,18 +184,18 @@ def main():
     q = " ".join(a.query)
     if a.lexical:
         rows = lexical(q, a.k, a.code)
-        for cite, struct, kind, snip, _ in rows or []:
-            print(f"\n[{kind}] {cite}" + (f"  ·  {struct}" if struct else ""))
+        for cite, struct, doc_type, snip, _ in rows or []:
+            print(f"\n[{doc_type}] {cite}" + (f"  ·  {struct}" if struct else ""))
             print(f"   {snip}")
         if not rows:
             print("(sin resultados)")
         return
 
     res = hybrid(q, a.code)
-    print(f"{len(res)} artículos relevantes (N adaptativo):")
+    print(f"{len(res)} artículos de LEY relevantes (N adaptativo):")
     for r in res:
         loc = f"  ·  {r['structure']}" if r["structure"] else ""
-        print(f"\n[{r['score']}] {r['citation']}{loc}")
+        print(f"\n[{r['rama']}] {r['citation']}{loc}")
         print(f"   {_excerpt(r['text'])}")
     if not res:
         print("(sin resultados)")

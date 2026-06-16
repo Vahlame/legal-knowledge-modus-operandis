@@ -43,9 +43,9 @@ def _topic_hits(con, question, k=6):
         return []
     match = " OR ".join(f'"{t}"' for t in toks)
     rows = con.execute(
-        "SELECT citation, text FROM chunks WHERE chunks MATCH ? AND kind='temario' "
+        "SELECT citation, rama, text FROM chunks WHERE chunks MATCH ? AND doc_type='temario' "
         "ORDER BY rank LIMIT ?", (match, k)).fetchall()
-    return [{"citation": c, "topic": _excerpt(t, 100)} for c, t in rows]
+    return [{"citation": c, "rama": rama, "topic": _excerpt(t, 100)} for c, rama, t in rows]
 
 
 def consult(question, code=None, expand_top=6, neighbor_top=2, max_related=40):
@@ -53,7 +53,7 @@ def consult(question, code=None, expand_top=6, neighbor_top=2, max_related=40):
     core = search.hybrid(question, code)
     con = sqlite3.connect(DB)
 
-    core_arts = [r for r in core if r["kind"] == "codigo"]
+    core_arts = [r for r in core if r["doc_type"] == "ley"]
     core_keys = {(r["slug"], r["article"]) for r in core if r["article"]}
 
     related, order = {}, []  # (slug,art) -> relación
@@ -83,8 +83,9 @@ def consult(question, code=None, expand_top=6, neighbor_top=2, max_related=40):
     con.close()
     return {
         "question": question,
-        "core": [{"citation": r["citation"], "structure": r["structure"], "slug": r["slug"],
-                  "article": r["article"], "score": r["score"], "text": r["text"]}
+        "core": [{"doc_type": r["doc_type"], "rama": r["rama"], "citation": r["citation"],
+                  "structure": r["structure"], "slug": r["slug"], "article": r["article"],
+                  "score": r["score"], "text": r["text"]}
                  for r in core_arts],
         "related": related_items,
         "topics": topics,
@@ -93,20 +94,20 @@ def consult(question, code=None, expand_top=6, neighbor_top=2, max_related=40):
 
 def format_consult(b):
     out = [f"PREGUNTA: {b['question']}", ""]
-    out.append(f"== NÚCLEO ({len(b['core'])} artículos directamente relevantes) ==")
+    out.append(f"== FUENTES DE LEY ({len(b['core'])} artículos directamente relevantes) ==")
     for r in b["core"]:
         loc = f"  ·  {r['structure']}" if r["structure"] else ""
-        out.append(f"\n[{r['score']}] {r['citation']}{loc}")
+        out.append(f"\n[ley · {r['rama']}] {r['citation']}{loc}")
         out.append(f"   {_excerpt(r['text'], 300)}")
     if b["related"]:
-        out.append(f"\n== RELACIONADOS ({len(b['related'])} por concordancia) ==")
+        out.append(f"\n== ARTÍCULOS RELACIONADOS ({len(b['related'])} por concordancia) ==")
         for r in b["related"]:
             out.append(f"\n({r['relation']}) {r['citation']}")
             out.append(f"   {r['excerpt']}")
     if b["topics"]:
-        out.append("\n== TEMARIO (estudio/formación) ==")
+        out.append("\n== TEMARIO — guía de estudio (NO es la ley) ==")
         for t in b["topics"]:
-            out.append(f"   • [{t['citation']}] {t['topic']}")
+            out.append(f"   • [temario · {t['rama']}] {t['topic']}")
     return "\n".join(out)
 
 

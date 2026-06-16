@@ -1,26 +1,15 @@
 """Trocea los Markdown legales en chunks recuperables (uno por artículo).
 
-Cada chunk lleva su cita exacta y su ruta estructural (Libro/Título/Capítulo),
-que es lo que un abogado necesita para citar la fuente.
+Cada chunk lleva su clasificación EXPLÍCITA por archivo (doc_type/rama/source vía
+`sources.classify`) además de su cita y ruta estructural — así nunca se confunde la
+ley (la materia) con un temario (guía de estudio).
 """
 import re
 import pathlib
 
-# slug de archivo -> nombre citable
-DISPLAY = {
-    "codigo-civil-2026": "Código Civil",
-    "codigo-penal-2026": "Código Penal",
-    "codigo-procesal-civil-2026": "Código Procesal Civil",
-    "codigo-procesal-penal-2026": "Código Procesal Penal",
-    "codigo-procesal-de-familia-2026": "Código Procesal de Familia",
-    "codigo-de-familia": "Código de Familia",
-    "examen-incorporacion-caacr-2026": "Examen de Incorporación CAACR 2026",
-}
+from legal_rag import sources
+
 ART_RE = re.compile(r"^Art[ií]culo\s+(.+)$")
-
-
-def display_name(slug: str) -> str:
-    return DISPLAY.get(slug) or slug.replace("-", " ").title()
 
 
 def parse_frontmatter(text: str):
@@ -38,8 +27,12 @@ def parse_frontmatter(text: str):
 
 def chunk_file(path: pathlib.Path):
     meta, body = parse_frontmatter(path.read_text(encoding="utf-8"))
-    slug, name = path.stem, display_name(path.stem)
-    kind = meta.get("doc_kind", "")
+    slug = path.stem
+    info = sources.classify(slug)                 # clasificación por nombre de archivo
+    name = info["label"]
+    base = {"slug": slug, "name": name, "doc_type": info["doc_type"],
+            "rama": info["rama"], "source": meta.get("source", slug)}
+
     chunks, structure, cur, buf = [], "", None, []
     sec = 0  # id de sección estructural: único por Capítulo físico, no por su título
 
@@ -62,9 +55,8 @@ def chunk_file(path: pathlib.Path):
             m = ART_RE.match(heading)
             art = m.group(1).strip() if m else None
             cite = f"{name}, art. {art}" if art else f"{name} — {heading}"
-            cur = {"slug": slug, "name": name, "kind": kind, "heading": heading,
-                   "article": art, "structure": structure, "section": f"{slug}#{sec}",
-                   "citation": cite}
+            cur = {**base, "heading": heading, "article": art, "structure": structure,
+                   "section": f"{slug}#{sec}", "citation": cite}
         else:
             buf.append(line)
     flush()
@@ -74,7 +66,6 @@ def chunk_file(path: pathlib.Path):
             p = para.strip().lstrip("# ").strip()
             if len(p) < 15:
                 continue
-            chunks.append({"slug": slug, "name": name, "kind": kind, "heading": name,
-                           "article": None, "structure": "", "section": f"{slug}#0",
-                           "citation": name, "text": p})
+            chunks.append({**base, "heading": name, "article": None, "structure": "",
+                           "section": f"{slug}#0", "citation": name, "text": p})
     return chunks

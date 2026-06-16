@@ -56,7 +56,7 @@ def build_into(con, chunks):
             valid.setdefault(c["slug"], set()).add(c["article"])
     edges = []
     for c in chunks:
-        if c["kind"] == "codigo" and c["article"]:
+        if c["doc_type"] == "ley" and c["article"]:
             vset = valid.get(c["slug"], set())
             for dst in refs_in(c["text"]):
                 if dst != c["article"] and dst in vset:

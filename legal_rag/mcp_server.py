@@ -28,9 +28,10 @@ PROTOCOL = "2024-11-05"
 
 TOOLS = [
     {"name": "legal_search",
-     "description": "Búsqueda híbrida (BM25 + semántica) en derecho costarricense. "
-                    "Devuelve los artículos relevantes (cantidad adaptativa, sin tope fijo) "
-                    "con su cita exacta. Para localizar la norma aplicable a un tema/caso.",
+     "description": "Búsqueda híbrida (BM25 + semántica + rerank) en derecho costarricense. "
+                    "Devuelve SOLO artículos de LEY (códigos) relevantes (cantidad adaptativa, "
+                    "sin tope fijo) con su cita exacta y rama. Los temarios de estudio NO se "
+                    "mezclan aquí. Para localizar la norma aplicable a un tema/caso.",
      "inputSchema": {"type": "object",
                      "properties": {"query": {"type": "string", "description": "consulta en lenguaje natural"},
                                     "code": {"type": "string", "description": "slug de código opcional, p.ej. codigo-civil-2026"}},
@@ -61,8 +62,8 @@ TOOLS = [
 def call_tool(name, args):
     if name == "legal_search":
         res = search.hybrid(args["query"], args.get("code"))
-        return [{"citation": r["citation"], "structure": r["structure"],
-                 "score": r["score"], "text": r["text"]} for r in res]
+        return [{"doc_type": r["doc_type"], "rama": r["rama"], "citation": r["citation"],
+                 "structure": r["structure"], "score": r["score"], "text": r["text"]} for r in res]
     if name == "legal_article":
         rows = search.get_article(args["article"], args.get("code"))
         return [{"citation": c, "structure": s, "text": t} for c, s, t in rows]

@@ -63,18 +63,19 @@ def build():
     con = sqlite3.connect(DB)
     con.execute(
         """CREATE VIRTUAL TABLE chunks USING fts5(
-               slug UNINDEXED, name UNINDEXED, kind UNINDEXED,
+               slug UNINDEXED, name UNINDEXED, doc_type UNINDEXED,
                heading, article UNINDEXED, structure, citation UNINDEXED, text,
-               section UNINDEXED,
+               section UNINDEXED, rama UNINDEXED, source UNINDEXED,
                tokenize='unicode61 remove_diacritics 2')"""
     )
     docs = sorted(MD_DIR.glob("*.md"))
     chunks = [c for md in docs for c in chunk_file(md)]
     con.executemany(
-        "INSERT INTO chunks(slug,name,kind,heading,article,structure,citation,text,section)"
-        " VALUES(?,?,?,?,?,?,?,?,?)",
-        [(c["slug"], c["name"], c["kind"], c["heading"], c["article"],
-          c["structure"], c["citation"], c["text"], c["section"]) for c in chunks],
+        "INSERT INTO chunks(slug,name,doc_type,heading,article,structure,citation,text,section,rama,source)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        [(c["slug"], c["name"], c["doc_type"], c["heading"], c["article"],
+          c["structure"], c["citation"], c["text"], c["section"], c["rama"], c["source"])
+         for c in chunks],
     )
 
     embedder, sem_desc = _build_semantic(con, chunks)
