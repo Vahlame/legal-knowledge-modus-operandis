@@ -1,17 +1,28 @@
 """
-Clasificación explícita de cada archivo fuente POR SU NOMBRE, en un solo lugar.
+Clasificación de cada archivo fuente POR SU NOMBRE — escalable a muchos documentos
+con nombres distintos.
 
-Distingue tajantemente (para no confundir nunca la ley con una guía de estudio):
-  - ley      : el derecho aplicable — códigos y demás normativa = "LA MATERIA".
-  - temario  : guías de estudio del examen de incorporación (NO son derecho citable).
-  - examen   : el examen de incorporación (práctica/autoevaluación).
+Dos niveles:
+  1) REGISTRY  — overrides curados para los archivos conocidos (etiquetas bonitas).
+  2) inferencia por palabras clave — para CUALQUIER archivo nuevo, sin tocar código:
+     "Ley General de la Administración Pública", "Constitución Política",
+     "Reglamento de Tránsito", "Jurisprudencia Sala Primera"… se clasifican solos.
 
-Regla del sistema: para RESPONDER casos se usa solo `doc_type == "ley"`; los temarios
-van por su stream de estudio aparte. Registro deliberado y auditable, con fallback
-heurístico para archivos nuevos. `classify()` recibe el slug del archivo.
+Tipos: ley (la materia: códigos y demás normativa) · temario (guía de estudio) ·
+examen · jurisprudencia · doctrina · otro. Para RESPONDER se usa solo `is_law`
+(ley + jurisprudencia); los temarios van por su stream de estudio aparte.
 """
+import re
+import unicodedata
 
-# slug -> (doc_type, rama, etiqueta citable)
+
+def _norm(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    return re.sub(r"[\s_\-]+", " ", s).strip()
+
+
+# slug -> (doc_type, rama, etiqueta citable) — overrides curados
 REGISTRY = {
     "codigo-civil-2026":                ("ley", "Derecho Civil",               "Código Civil"),
     "codigo-procesal-civil-2026":       ("ley", "Derecho Procesal Civil",      "Código Procesal Civil"),
@@ -29,43 +40,68 @@ REGISTRY = {
     "examen-incorporacion-caacr-2026":     ("examen",  "General",                "Examen de Incorporación CAACR 2026"),
 }
 
-# para fallback: el "procesal X" debe ganar a "X" -> va primero
-_RAMAS = [
-    ("procesal de familia", "Derecho Procesal de Familia"),
-    ("procesal civil",      "Derecho Procesal Civil"),
-    ("procesal penal",      "Derecho Procesal Penal"),
-    ("civil",               "Derecho Civil"),
-    ("penal",               "Derecho Penal"),
-    ("familia",             "Derecho de Familia"),
-    ("comercial",           "Derecho Comercial"),
-    ("constitucional",      "Derecho Constitucional"),
-    ("laboral",             "Derecho Laboral"),
-    ("administrativo",      "Derecho Administrativo"),
+# Inferencia de TIPO por palabras clave (en orden de prioridad).
+_TYPE_RULES = [
+    ("temario",        ["temario", "programa de estudio", "syllabus", "guia de estudio", "plan de estudio"]),
+    ("examen",         ["examen", "prueba ", "evaluacion", "cuestionario"]),
+    ("jurisprudencia", ["jurisprudencia", "sentencia", "voto ", "resolucion de la sala",
+                        "dictamen", "sala constitucional", "sala primera", "sala segunda", "sala tercera"]),
+    ("doctrina",       ["doctrina", "manual de", "tratado de", "comentario", "ensayo", "articulo academico"]),
+    ("ley",            ["codigo", "ley", "constitucion", "reglamento", "decreto", "norma",
+                        "estatuto", "convencion", "tratado", "directriz", "ordenanza",
+                        "acuerdo", "protocolo", "lineamiento"]),
+]
+
+# Inferencia de RAMA (los compuestos "procesal X" primero).
+_RAMA_RULES = [
+    ("Derecho Procesal de Familia", ["procesal de familia", "procesal familia"]),
+    ("Derecho Procesal Civil",      ["procesal civil"]),
+    ("Derecho Procesal Penal",      ["procesal penal"]),
+    ("Derecho Procesal Laboral",    ["procesal laboral", "procesal de trabajo"]),
+    ("Derecho Constitucional",      ["constitucional", "constitucion"]),
+    ("Derecho Administrativo",      ["administrativo", "administracion publica", "contencioso"]),
+    ("Derecho Tributario",          ["tributario", "fiscal", "impuesto", "renta"]),
+    ("Derecho Laboral",             ["laboral", "trabajo"]),
+    ("Derecho Comercial",           ["comercial", "mercantil", "comercio", "sociedades"]),
+    ("Derecho de la Niñez",         ["ninez", "adolescencia", "menores", "ninez"]),
+    ("Derecho de Familia",          ["familia"]),
+    ("Derecho Notarial",            ["notarial", "notariado"]),
+    ("Derecho Registral",           ["registral", "registro publico"]),
+    ("Derecho Ambiental",           ["ambiental", "ambiente"]),
+    ("Derecho Agrario",             ["agrario", "agraria"]),
+    ("Derecho Municipal",           ["municipal", "municipalidad"]),
+    ("Derecho Internacional",       ["internacional"]),
+    ("Derecho Penal",               ["penal"]),
+    ("Derecho Civil",               ["civil"]),
 ]
 
 
-def _rama(low: str) -> str:
-    norm = low.replace("-", " ")
-    for key, rama in _RAMAS:
-        if key in norm:
+def _infer_type(norm: str) -> str:
+    for t, kws in _TYPE_RULES:
+        if any(k in norm for k in kws):
+            return t
+    return "otro"
+
+
+def _infer_rama(norm: str) -> str:
+    for rama, kws in _RAMA_RULES:
+        if any(k in norm for k in kws):
             return rama
     return "General"
 
 
+def _label(slug: str) -> str:
+    words = [w for w in re.split(r"[\s_\-]+", slug) if not re.fullmatch(r"(19|20)\d{2}", w)]
+    s = " ".join(words).title()
+    s = re.sub(r"\bCdigo\b|\bCodigo\b", "Código", s)
+    return s.strip() or slug
+
+
 def classify(slug: str) -> dict:
-    """Devuelve {doc_type, rama, label, is_law} para el slug de un archivo."""
+    """{doc_type, rama, label, is_law} para el slug de un archivo (conocido o nuevo)."""
     if slug in REGISTRY:
         t, rama, label = REGISTRY[slug]
-    else:  # archivo nuevo: heurística por nombre
-        low = slug.lower()
-        rama = _rama(low)
-        title = slug.replace("-", " ").title()
-        if low.startswith("temario"):
-            t, label = "temario", title
-        elif "examen" in low:
-            t, label = "examen", title
-        elif low.startswith("codigo") or "codigo" in low or low.startswith("ley") or "-ley-" in low:
-            t, label = "ley", title
-        else:
-            t, label = "otro", title
-    return {"doc_type": t, "rama": rama, "label": label, "is_law": t == "ley"}
+    else:
+        norm = _norm(slug)
+        t, rama, label = _infer_type(norm), _infer_rama(norm), _label(slug)
+    return {"doc_type": t, "rama": rama, "label": label, "is_law": t in ("ley", "jurisprudencia")}

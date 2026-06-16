@@ -83,31 +83,55 @@ def consult(question, code=None, expand_top=6, neighbor_top=2, max_related=40):
     con.close()
     return {
         "question": question,
-        "core": [{"doc_type": r["doc_type"], "rama": r["rama"], "citation": r["citation"],
-                  "structure": r["structure"], "slug": r["slug"], "article": r["article"],
-                  "score": r["score"], "text": r["text"]}
+        "core": [{"doc_type": r["doc_type"], "rama": r["rama"], "name": r["name"],
+                  "citation": r["citation"], "structure": r["structure"], "slug": r["slug"],
+                  "article": r["article"], "score": r["score"], "text": r["text"]}
                  for r in core_arts],
         "related": related_items,
         "topics": topics,
     }
 
 
+def _group_by(items, key):
+    g = {}
+    for it in items:
+        g.setdefault(key(it), []).append(it)
+    return g
+
+
 def format_consult(b):
+    """Salida agrupada inteligentemente: las fuentes de ley por cuerpo legal (ordenado
+    por relevancia), las concordancias por tipo de relación, y los temarios por rama.
+    Escala limpio aunque haya muchos documentos distintos."""
     out = [f"PREGUNTA: {b['question']}", ""]
-    out.append(f"== FUENTES DE LEY ({len(b['core'])} artículos directamente relevantes) ==")
-    for r in b["core"]:
-        loc = f"  ·  {r['structure']}" if r["structure"] else ""
-        out.append(f"\n[ley · {r['rama']}] {r['citation']}{loc}")
-        out.append(f"   {_excerpt(r['text'], 300)}")
+
+    core = b["core"]
+    groups = _group_by(core, lambda r: r["name"])
+    ordered = sorted(groups.items(), key=lambda kv: -max(x["score"] for x in kv[1]))
+    out.append(f"════ FUENTES DE LEY · {len(core)} artículo(s) en {len(ordered)} cuerpo(s) legal(es) ════")
+    for name, arts in ordered:
+        out.append(f"\n── {name}  ·  {arts[0]['rama']} ──")
+        for r in arts:
+            loc = f"  ·  {r['structure']}" if r["structure"] else ""
+            ref = f"art. {r['article']}" if r["article"] else r["citation"]
+            out.append(f"  • {ref}{loc}")
+            out.append(f"      {_excerpt(r['text'], 240)}")
+
     if b["related"]:
-        out.append(f"\n== ARTÍCULOS RELACIONADOS ({len(b['related'])} por concordancia) ==")
-        for r in b["related"]:
-            out.append(f"\n({r['relation']}) {r['citation']}")
-            out.append(f"   {r['excerpt']}")
+        out.append(f"\n════ ARTÍCULOS RELACIONADOS · {len(b['related'])} por concordancia ════")
+        labels = {"cita": "cita a", "citado_por": "citado por", "misma_materia": "misma materia"}
+        rg = _group_by(b["related"], lambda r: r["relation"])
+        for rel in ("cita", "citado_por", "misma_materia"):
+            items = rg.get(rel, [])
+            if items:
+                out.append(f"  [{labels[rel]}] " + " · ".join(r["citation"] for r in items))
+
     if b["topics"]:
-        out.append("\n== TEMARIO — guía de estudio (NO es la ley) ==")
-        for t in b["topics"]:
-            out.append(f"   • [temario · {t['rama']}] {t['topic']}")
+        out.append("\n════ TEMARIO · guía de estudio (NO es la ley) ════")
+        for rama, items in _group_by(b["topics"], lambda t: t["rama"]).items():
+            out.append(f"  ── {rama} ──")
+            for t in items:
+                out.append(f"    • {t['topic']}")
     return "\n".join(out)
 
 

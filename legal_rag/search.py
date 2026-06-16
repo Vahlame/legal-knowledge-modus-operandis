@@ -82,12 +82,13 @@ def _semantic_rank(con, query, pool):
 
 
 def _pack(row, score):
-    slug, article, cite, struct, doc_type, rama, text = row
+    slug, article, cite, struct, doc_type, rama, text, name = row
     return {"score": round(float(score), 4), "slug": slug, "article": article, "citation": cite,
-            "structure": struct, "doc_type": doc_type, "rama": rama, "text": text}
+            "structure": struct, "doc_type": doc_type, "rama": rama, "name": name, "text": text}
 
 
-def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, types=("ley",), rerank=True):
+def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0,
+           types=("ley", "jurisprudencia"), rerank=True):
     """Recuperación de máxima calidad para RESPUESTA legal (solo artículos de código;
     los temarios van por su stream de estudio aparte):
        1) candidatos = RRF(BM25, semántico)  -> recall
@@ -108,7 +109,7 @@ def hybrid(query, code=None, pool=120, k=60, cap=25, margin=2.0, types=("ley",),
     rows = {}
     for rid in cand:
         r = con.execute(
-            "SELECT slug, article, citation, structure, doc_type, rama, text FROM chunks WHERE rowid=?",
+            "SELECT slug, article, citation, structure, doc_type, rama, text, name FROM chunks WHERE rowid=?",
             (rid,)).fetchone()
         if r and (types is None or r[4] in types) and not (code and r[0] != code):
             rows[rid] = r
