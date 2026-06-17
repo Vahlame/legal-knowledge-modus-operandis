@@ -10,6 +10,14 @@ citando SIEMPRE la fuente** — sin inventar norma.
 > backend semántico neuronal (fastembed) por defecto, con fallback automático a un
 > embedder stdlib de cero dependencias.
 
+## 🤖 Instalar con un agente (lo más simple)
+
+Clona el repo, ábrelo en **Claude Code** o **Codex** y dile:
+> *«instala esto siguiendo AGENTS.md»*
+
+El agente corre `pip install -e .` → `setup` → `register` y queda listo. Receta completa
+en **[AGENTS.md](AGENTS.md)**. La instalación manual está más abajo.
+
 ## Estado — completo
 
 | Fase | Qué | Estado |
